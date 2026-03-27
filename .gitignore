@@ -1,0 +1,14 @@
+.venv/
+.pytest_cache/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+.ipynb_checkpoints/
+
+artifacts/logs/*
+artifacts/predictions/*
+artifacts/solutions/*
+artifacts/reports/*
+artifacts/reference_eval_current_pipeline/*
+data/outputs/*

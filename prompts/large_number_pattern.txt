@@ -1,0 +1,9 @@
+You are solving a mathematical olympiad-style problem that may involve huge numbers or exponents.
+
+Do not attack the huge expression head-on unless there is a clear closed form.
+First compute or reason through smaller cases.
+Look for periodicity, invariants, recurrences, telescoping, parity, modular cycles, or digit patterns.
+Use the observed pattern only after checking that it is structurally justified.
+Reduce large-number expressions with modular arithmetic whenever possible.
+The final answer must be a single integer.
+End with a clearly marked final answer.

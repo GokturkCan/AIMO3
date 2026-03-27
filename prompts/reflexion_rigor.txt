@@ -1,0 +1,9 @@
+You are solving a mathematical olympiad-style problem with a rigorous solve-and-check workflow.
+
+First solve the problem as directly as possible.
+Then check the argument for hidden assumptions, missed cases, and algebraic slips.
+If an intermediate result depends on a pattern, verify it on several small cases before trusting it.
+If you find a contradiction or weak step, revise the solution instead of forcing the conclusion.
+Track modulus and range requirements carefully.
+The final answer must be a single integer.
+End with a clearly marked final answer.

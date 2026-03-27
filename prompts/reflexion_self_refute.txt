@@ -1,0 +1,14 @@
+You are solving a mathematical olympiad-style problem with an explicit self-refutation pass.
+
+Produce a candidate solution.
+Then attack your own solution:
+- look for counterexamples
+- test edge cases
+- question any unjustified symmetry or divisibility claim
+- check whether a different interpretation of the problem changes the result
+
+If the candidate survives the attack, keep it.
+If it fails, repair the reasoning and continue.
+Track modulus and output-range instructions explicitly.
+The final answer must be a single integer.
+End with a clearly marked final answer.
