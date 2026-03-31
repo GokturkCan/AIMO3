@@ -44,8 +44,7 @@ Recent work completed in this repository:
 
 - modularized orchestration helpers into `src/`
 - added attempt-level tracing, verifier-aware selection, policy-driven retry helpers, and regression analysis
-- built a self-contained Kaggle evaluation notebook:
-  - `notebooks/aimo3-reference-eval-current-pipeline.ipynb`
+- built a self-contained Kaggle notebook flow for evaluation and submission packaging
 - removed notebook dependence on local `src/` and `prompts/` folders for Kaggle evaluation packaging
 - produced a first real reference-set evaluation baseline
 - added a notebook-only repair/canonicalization pass for weak final answers
@@ -54,34 +53,33 @@ Recent work completed in this repository:
 - improved repair candidate selection so repair now samples stronger and more diverse weak attempts
 - strengthened the repair prompt to force a single boxed integer instead of continuing draft reasoning
 - added lightweight in-notebook exception visibility for `_process_attempt(...)` debugging
+- fixed a hidden answer-scan crash path by making `_scan_for_answer(...)` tolerant when `postprocess_candidate` is absent
+- fixed boxed-answer parsing for forms like `\\boxed{21\\,818}` and integer expressions embedded inside boxed text
+- fixed submission packaging so the final notebook writes `submission.parquet` when Kaggle's local gateway input is absent during commit runs
+- submitted the packaged notebook and reached a public score of `36 / 50`
 
-Current reference-set baseline:
+Current main tracked notebook:
 
-- 10 questions
-- 1 correct
-- 9 generation failures
-- 0 selection failures
-
-This means the current main bottleneck is upstream solve execution / candidate generation rather than answer selection.
+- `notebooks/aimo3-reference-eval-current-pipeline-submission3.ipynb`
 
 ## Latest notebook results
 
-Latest targeted notebook checks after the repair-pass work:
+Latest tracked progression:
 
-- 2-problem smoke test:
-  - `92ba6a` -> correct
-  - `0e644e` -> correct
-- 5-problem mini-eval:
-  - `0e644e` -> correct
-  - `92ba6a` -> correct
-  - `26de63` -> incorrect
-  - `424e18` -> incorrect
-  - `dd7f5e` -> incorrect
-  - aggregate: `2 / 5 = 0.4`
+- early 10-problem notebook baseline:
+  - `1 / 10`
+- intermediate mini-eval after repair-pass work:
+  - `2 / 5`
+- late debug-stage reference runs:
+  - targeted 5-problem run recovered to `5 / 5`
+  - 10-problem reference eval reached `9 / 10`
+  - the remaining miss was `86e8e5`, which looked like a generation failure rather than a selection/parsing failure
+- final public Kaggle submission:
+  - `36 / 50`
 
 Interpretation:
 
-- The notebook is now materially better than the original 10-problem baseline.
-- Repair/canonicalization can reliably rescue some problems where the raw attempts already contain the right reasoning but fail to emit a clean final answer.
-- The current pipeline is still not stable enough for a confident submission.
-- Remaining failures appear concentrated in hard problems where generation is weak and repair sometimes collapses to `0` or other small incorrect integers.
+- The repository now contains a real submission notebook, not just an evaluation/debug notebook.
+- The biggest quality gains came from parser robustness, safer answer extraction, and stronger post-hoc repair behavior on weak final answers.
+- Selection is no longer the dominant bottleneck on the tracked reference set.
+- The remaining gap to stronger scores appears to be concentrated in hard-problem generation quality.
