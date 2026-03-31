@@ -2,128 +2,159 @@
 
 ## Current State
 
-This repository contains the current local development state of the AIMO3 Kaggle pipeline.
+This repository now tracks the latest working Kaggle submission notebook:
 
-The main progress so far is:
+- `notebooks/aimo3-reference-eval-current-pipeline-submission3.ipynb`
 
-- extracted orchestration logic into small `src/` modules
-- added attempt-level records, verifier-aware selection, retry/policy helpers, and regression helpers
-- built a self-contained Kaggle evaluation notebook that no longer depends on local `src/` or `prompts/` folders
-- ran a real reference-set evaluation on the 10 reference problems
-- added notebook-local parser and selector hardening for malformed boxed answers
-- added a final-answer repair / canonicalization pass inside the Kaggle notebook flow
-- added clean-candidate-first selection behavior for repaired `ok` candidates
-- added temporary exception visibility in `_process_attempt(...)` to surface hidden runtime failures during notebook debugging
+That notebook is the current best public submission artifact in the repo and produced:
 
-## Current Evaluation Result
+- public Kaggle score: `36 / 50`
 
-Reference evaluation summary:
+## What Changed In The Final Debug Cycle
 
-- `num_questions = 10`
-- `num_correct = 1`
-- `accuracy = 0.1`
-- `candidate_correct_exists = 1`
-- `selection_failure = 0`
-- `generation_failure = 9`
-- `extraction_failure = 0`
-- `retry_recoverable = 0`
+The late-stage notebook work was not one giant rewrite. It was a sequence of focused fixes inside the notebook-heavy pipeline, especially in `Cell 13`.
 
-Interpretation:
+### 1. Attempt introspection and debug visibility
 
-- the main bottleneck is not selection
-- the main bottleneck is upstream attempt execution / candidate generation
-- parser mostly falls back because strong final answers are rarely produced
-- tool-assisted reasoning is not behaving reliably yet
+We first made the notebook observable enough to debug:
 
-## Latest Notebook Debug Outcome
+- added `AttemptRecord`-based tracing and richer attempt metadata
+- added `attempt_debug_trace.jsonl` logging
+- exposed hidden `_process_attempt(...)` exceptions in notebook outputs
+- added problem-id lookup support for debug traces
 
-### What changed in the notebook
+This made it possible to distinguish:
 
-The current notebook state now includes these incremental changes inside `Cell 13`:
+- generation failures
+- parse failures
+- selector mistakes
+- runtime/tool-loop failures
 
-- weaker confidence for `last_integer` fallback after malformed boxed answers
-- parse-tier downgrade for malformed boxed-answer cases
-- extra suspicion penalty for malformed boxed / fallback-after-invalid-boxed candidates
-- repair / canonicalization pass applied after normal attempts and retries
-- stricter repair prompt that asks for exactly one boxed integer and explicitly says not to continue the draft
-- improved repair-source selection across `self_refute`, `tool_guided`, and `baseline` attempt families
-- clean-candidate-first guard in `select_best_attempt(...)`
+### 2. Selection and repair hardening
 
-### Targeted smoke-test result
+We then improved the postprocessing side:
 
-The latest targeted smoke tests show real progress:
+- added a repair / canonicalization pass after normal attempts and retries
+- added stronger repair-source selection across prompt families
+- forced repair prompts to output exactly one boxed integer
+- added clean-candidate-first selection behavior
+- penalized suspicious tiny repaired answers when stronger original evidence existed
 
-- `92ba6a`
-  - raw attempts still often land in `tier3` / `flagged`
-  - repair now produces multiple `50` candidates with `tier2` / `ok`
-  - final selected answer is correct
-- `0e644e`
-  - raw attempts are also weak
-  - repair produces multiple `336` candidates with `tier2` / `ok`
-  - final selected answer is correct
+This moved the system from "often has weak drafts but cannot cleanly use them" toward "can often salvage the right answer if the draft is already close".
 
-Interpretation:
+### 3. Hidden runtime failure fix
 
-- the repair pass is not just cosmetic; it can convert weak-but-promising drafts into clean competitive candidates
-- the clean-candidate-first guard is doing useful work once repair succeeds
-- for at least two qualitatively different problems, the notebook now recovers the correct final answer from weak raw attempts
+During debugging we found a silent collapse path:
 
-### 5-problem mini-eval result
+- `_scan_for_answer(...)` could fail when `postprocess_candidate` was absent
+- this produced short broken attempts and polluted selection
 
-Recent controlled mini-eval:
+We fixed that by making answer scanning tolerant:
 
-- `0e644e` -> correct (`336`)
-- `26de63` -> incorrect (`0`, expected `32951`)
-- `424e18` -> incorrect (`0`, expected `21818`)
-- `92ba6a` -> correct (`50`)
-- `dd7f5e` -> incorrect (`0`, expected `160`)
+- use `postprocess_candidate` only if it exists and is callable
+- otherwise safely fall back to the legacy boxed/regex scanner
 
-Aggregate:
+This removed a major source of false low-quality attempts.
 
-- `num_questions = 5`
-- `num_correct = 2`
-- `accuracy = 0.4`
+### 4. Parser robustness fix
 
-Interpretation:
+One of the most important late fixes was parser robustness for boxed answers.
 
-- this is a meaningful improvement over the original 10-question baseline
-- however, the notebook is still not submission-stable
-- current failures are no longer explained only by selection
-- remaining failure modes now look mixed:
-  - some hard problems still fail during upstream generation
-  - some repair outputs collapse to `0` or other small incorrect integers
+The parser was failing on cases like:
+
+- `\boxed{21\,818}`
+- boxed expressions that still contained digits but were not plain raw integers
+
+We changed integer parsing to:
+
+- normalize `\,` and commas
+- collapse whitespace
+- accept plain signed integers after normalization
+- otherwise extract the last integer inside the boxed content
+
+This specifically fixed the fragmentation bug that had been splitting correct answers like `21818` into garbage candidates such as `818`.
+
+### 5. Submission packaging fix
+
+The final notebook conversion required one more Kaggle-specific packaging fix.
+
+Problem:
+
+- plain `run_local_gateway(test.csv)` failed during commit runs because `test.csv` was not present in that environment
+- this prevented `submission.parquet` from being created
+
+Final submission cell behavior:
+
+- `serve()` on competition reruns
+- `run_local_gateway(TEST_PATH)` when local gateway input actually exists
+- otherwise write a placeholder `/kaggle/working/submission.parquet`
+
+That change made the notebook submit-ready in Kaggle's notebook submission flow.
+
+## Evaluation Progression
+
+The tracked progression looked like this:
+
+- initial 10-question reference eval: `1 / 10`
+- intermediate 5-problem mini-eval: `2 / 5`
+- later targeted 5-problem run: `5 / 5`
+- later 10-problem reference eval: `9 / 10`
+- final public Kaggle submission: `36 / 50`
+
+## Interpretation Of The 9 / 10 Reference Result
+
+The most important takeaway from the final reference eval was:
+
+- parser and selector were no longer the main bottlenecks
+
+The remaining miss in the 10-problem eval was:
+
+- `86e8e5`
+
+and it looked like:
+
+- no correct candidate was generated at all
+- therefore this was more likely a generation-quality gap than a postprocessing/selection bug
+
+## Interpretation Of The 36 / 50 Public Score
+
+The public score suggests:
+
+- the notebook is now a real competitive baseline
+- the packaging and submission path are working
+- the late parser/selection/repair fixes materially helped
+- there is still substantial upside left on harder problems
+
+Most likely current bottleneck:
+
+- upstream solve quality on difficult problems
+
+Less likely to be the main bottleneck now:
+
+- final answer extraction
+- repaired-answer ranking
+- notebook submission packaging
 
 ## Current Assessment
 
 Current repo state is best described as:
 
-- a substantially improved notebook debug branch
-- promising enough to preserve and build on
-- not yet strong enough for a final submission run
+- a working submission-capable Kaggle notebook
+- a materially improved debug-to-submission branch
+- a strong enough artifact to preserve exactly as-is before further experimentation
 
-## Next Likely Focus
+## Recommended Next Work
 
-If work resumes later, the highest-value next steps are:
+If development continues from this checkpoint, the next most valuable directions are:
 
-- inspect why repair sometimes converges to `0`
-- reduce over-trusting repaired small-number answers
-- improve hard-problem generation quality before repair
-- rerun a controlled medium-size eval before any submission attempt
+- improve hard-problem generation quality rather than adding more selector complexity
+- reduce latency/runtime so the notebook has more headroom under Kaggle limits
+- isolate the hardest public failures and reproduce them on controlled local/reference subsets
+- keep this notebook immutable as a pinned baseline and branch from it for future experiments
 
 ## Most Important Files
 
-- `src/`: modular local experimentation layer
-- `notebooks/44-50-let-me-over-cook-postprocess-v1.ipynb`: working notebook copy used for staged integration
-- `notebooks/aimo3-reference-eval-current-pipeline.ipynb`: self-contained Kaggle evaluation notebook
-- `tests/`: local unit/regression tests
-
-## Next Debug Focus
-
-The next development step should be targeted debugging, not broader feature work.
-
-Highest-priority debug targets:
-
-- `_process_attempt(...)` exception visibility
-- tool loop / python recipient handshake
-- early answer scan during streaming
-- raw output tracing to distinguish boxed answers vs last-integer fallback
+- `notebooks/aimo3-reference-eval-current-pipeline-submission3.ipynb`: current best public-scoring submission notebook
+- `README.md`: project summary updated to the latest public score
+- `data/reference/reference.csv`: reference eval set used during notebook debugging
+- `src/`: local helper modules for structured experimentation outside Kaggle
